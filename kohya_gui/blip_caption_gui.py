@@ -1,9 +1,8 @@
 import gradio as gr
-from easygui import msgbox
 import subprocess
 import os
 import sys
-from .common_gui import get_folder_path, add_pre_postfix, scriptdir, list_dirs
+from .common_gui import get_folder_path, add_pre_postfix, scriptdir, list_dirs, setup_environment
 from .custom_logging import setup_logging
 
 # Set up logging
@@ -46,40 +45,56 @@ def caption_images(
     """
     # Check if the image folder is provided
     if not train_data_dir:
-        msgbox("Image folder is missing...")
+        log.info("Image folder is missing...")
         return
 
     # Check if the caption file extension is provided
     if not caption_file_ext:
-        msgbox("Please provide an extension for the caption files.")
+        log.info("Please provide an extension for the caption files.")
         return
 
     log.info(f"Captioning files in {train_data_dir}...")
 
-    # Construct the command to run
-    run_cmd = rf'"{PYTHON}" "{scriptdir}/sd-scripts/finetune/make_captions.py"'
-    run_cmd += f' --batch_size="{int(batch_size)}"'
-    run_cmd += f' --num_beams="{int(num_beams)}"'
-    run_cmd += f' --top_p="{top_p}"'
-    run_cmd += f' --max_length="{int(max_length)}"'
-    run_cmd += f' --min_length="{int(min_length)}"'
+    # Construct the command to run make_captions.py
+    run_cmd = [rf"{PYTHON}", rf"{scriptdir}/sd-scripts/finetune/make_captions.py"]
+
+    # Add required arguments
+    run_cmd.append("--batch_size")
+    run_cmd.append(str(batch_size))
+    run_cmd.append("--num_beams")
+    run_cmd.append(str(num_beams))
+    run_cmd.append("--top_p")
+    run_cmd.append(str(top_p))
+    run_cmd.append("--max_length")
+    run_cmd.append(str(max_length))
+    run_cmd.append("--min_length")
+    run_cmd.append(str(min_length))
+
+    # Add optional flags to the command
     if beam_search:
-        run_cmd += f" --beam_search"
+        run_cmd.append("--beam_search")
     if caption_file_ext:
-        run_cmd += f' --caption_extension="{caption_file_ext}"'
-    run_cmd += f' "{train_data_dir}"'
-    run_cmd += f' --caption_weights="https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model_large_caption.pth"'
+        run_cmd.append("--caption_extension")
+        run_cmd.append(caption_file_ext)
 
-    log.info(run_cmd)
+    # Add the directory containing the training data
+    run_cmd.append(rf"{train_data_dir}")
 
-    # Set up the environment
-    env = os.environ.copy()
-    env["PYTHONPATH"] = (
-        f"{scriptdir}{os.pathsep}{scriptdir}/sd-scripts{os.pathsep}{env.get('PYTHONPATH', '')}"
+    # Add URL for caption model weights
+    run_cmd.append("--caption_weights")
+    run_cmd.append(
+        rf"https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model_large_caption.pth"
     )
 
+    # Set up the environment
+    env = setup_environment()
+
+    # Reconstruct the safe command string for display
+    command_to_run = " ".join(run_cmd)
+    log.info(f"Executing command: {command_to_run}")
+
     # Run the command in the sd-scripts folder context
-    subprocess.run(run_cmd, env=env, cwd=f"{scriptdir}/sd-scripts")
+    subprocess.run(run_cmd, env=env, shell=False, cwd=rf"{scriptdir}/sd-scripts")
 
     # Add prefix and postfix
     add_pre_postfix(
@@ -147,6 +162,7 @@ def gradio_blip_caption_gui_tab(headless=False, default_train_dir=None):
                 choices=[".cap", ".caption", ".txt"],
                 value=".txt",
                 interactive=True,
+                allow_custom_value=True,
             )
 
             prefix = gr.Textbox(

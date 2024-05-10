@@ -8,7 +8,7 @@ from .common_gui import (
     is_file_writable,
     scriptdir,
     list_files,
-    create_refresh_button,
+    create_refresh_button, setup_environment
 )
 
 from .custom_logging import setup_logging
@@ -72,36 +72,50 @@ def extract_lora(
     if not is_file_writable(save_to):
         return
 
-    run_cmd = (
-        rf'"{PYTHON}" "{scriptdir}/sd-scripts/networks/extract_lora_from_models.py"'
-    )
-    run_cmd += f" --load_precision {load_precision}"
-    run_cmd += f" --save_precision {save_precision}"
-    run_cmd += rf' --save_to "{save_to}"'
-    run_cmd += rf' --model_org "{model_org}"'
-    run_cmd += rf' --model_tuned "{model_tuned}"'
-    run_cmd += f" --dim {dim}"
-    run_cmd += f" --device {device}"
+    run_cmd = [
+        rf"{PYTHON}",
+        rf"{scriptdir}/sd-scripts/networks/extract_lora_from_models.py",
+        "--load_precision",
+        load_precision,
+        "--save_precision",
+        save_precision,
+        "--save_to",
+        rf"{save_to}",
+        "--model_org",
+        rf"{model_org}",
+        "--model_tuned",
+        rf"{model_tuned}",
+        "--dim",
+        str(dim),
+        "--device",
+        device,
+        "--clamp_quantile",
+        str(clamp_quantile),
+        "--min_diff",
+        str(min_diff),
+    ]
+
     if conv_dim > 0:
-        run_cmd += f" --conv_dim {conv_dim}"
+        run_cmd.append("--conv_dim")
+        run_cmd.append(str(conv_dim))
+
     if v2:
-        run_cmd += f" --v2"
+        run_cmd.append("--v2")
+
     if sdxl:
-        run_cmd += f" --sdxl"
-    run_cmd += f" --clamp_quantile {clamp_quantile}"
-    run_cmd += f" --min_diff {min_diff}"
-    if sdxl:
-        run_cmd += f" --load_original_model_to {load_original_model_to}"
-        run_cmd += f" --load_tuned_model_to {load_tuned_model_to}"
+        run_cmd.append("--sdxl")
+        run_cmd.append("--load_original_model_to")
+        run_cmd.append(load_original_model_to)
+        run_cmd.append("--load_tuned_model_to")
+        run_cmd.append(load_tuned_model_to)
 
-    log.info(run_cmd)
+    env = setup_environment()
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = (
-        rf"{scriptdir}{os.pathsep}{scriptdir}/sd-scripts{os.pathsep}{env.get('PYTHONPATH', '')}"
-    )
+    # Reconstruct the safe command string for display
+    command_to_run = " ".join(run_cmd)
+    log.info(f"Executing command: {command_to_run}")
 
-    # Run the command
+    # Run the command in the sd-scripts folder context
     subprocess.run(run_cmd, env=env)
 
 
@@ -110,7 +124,9 @@ def extract_lora(
 ###
 
 
-def gradio_extract_lora_tab(headless=False):
+def gradio_extract_lora_tab(
+    headless=False,
+):
     current_model_dir = os.path.join(scriptdir, "outputs")
     current_model_org_dir = os.path.join(scriptdir, "outputs")
     current_save_dir = os.path.join(scriptdir, "outputs")

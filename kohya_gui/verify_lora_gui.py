@@ -1,5 +1,4 @@
 import gradio as gr
-from easygui import msgbox
 import subprocess
 import os
 import sys
@@ -7,7 +6,7 @@ from .common_gui import (
     get_file_path,
     scriptdir,
     list_files,
-    create_refresh_button,
+    create_refresh_button, setup_environment
 )
 
 from .custom_logging import setup_logging
@@ -27,24 +26,29 @@ def verify_lora(
 ):
     # verify for caption_text_input
     if lora_model == "":
-        msgbox("Invalid model A file")
+        log.info("Invalid model A file")
         return
 
     # verify if source model exist
     if not os.path.isfile(lora_model):
-        msgbox("The provided model A is not a file")
+        log.info("The provided model A is not a file")
         return
 
-    run_cmd = rf'"{PYTHON}" "{scriptdir}/sd-scripts/networks/check_lora_weights.py" "{lora_model}"'
+    run_cmd = [
+        rf"{PYTHON}",
+        rf"{scriptdir}/sd-scripts/networks/check_lora_weights.py",
+        rf"{lora_model}",
+    ]
+    # run_cmd = rf'"{PYTHON}" "{scriptdir}/sd-scripts/networks/check_lora_weights.py" "{lora_model}"'
 
-    log.info(run_cmd)
+    # Reconstruct the safe command string for display
+    command_to_run = " ".join(run_cmd)
+    log.info(f"Executing command: {command_to_run}")
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = (
-        rf"{scriptdir}{os.pathsep}{scriptdir}/sd-scripts{os.pathsep}{env.get('PYTHONPATH', '')}"
-    )
+    # Set the environment variable for the Python path
+    env = setup_environment()
 
-    # Run the command
+    # Run the command using subprocess.Popen for asynchronous handling
     process = subprocess.Popen(
         run_cmd,
         stdout=subprocess.PIPE,

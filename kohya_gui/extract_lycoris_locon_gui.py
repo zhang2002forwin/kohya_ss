@@ -1,5 +1,4 @@
 import gradio as gr
-from easygui import msgbox
 import subprocess
 import os
 import sys
@@ -8,7 +7,7 @@ from .common_gui import (
     get_file_path,
     scriptdir,
     list_files,
-    create_refresh_button,
+    create_refresh_button, setup_environment
 )
 
 from .custom_logging import setup_logging
@@ -46,20 +45,20 @@ def extract_lycoris_locon(
 ):
     # Check for caption_text_input
     if db_model == "":
-        msgbox("Invalid finetuned model file")
+        log.info("Invalid finetuned model file")
         return
 
     if base_model == "":
-        msgbox("Invalid base model file")
+        log.info("Invalid base model file")
         return
 
     # Check if source model exist
     if not os.path.isfile(db_model):
-        msgbox("The provided finetuned model is not a file")
+        log.info("The provided finetuned model is not a file")
         return
 
     if not os.path.isfile(base_model):
-        msgbox("The provided base model is not a file")
+        log.info("The provided base model is not a file")
         return
 
     if os.path.dirname(output_name) == "":
@@ -73,44 +72,66 @@ def extract_lycoris_locon(
         path, ext = os.path.splitext(output_name)
         output_name = f"{path}_tmp{ext}"
 
-    run_cmd = rf'"{PYTHON}" "{scriptdir}/tools/lycoris_locon_extract.py"'
+    run_cmd = [fr'{PYTHON}', fr'{scriptdir}/tools/lycoris_locon_extract.py']
+
     if is_sdxl:
-        run_cmd += f" --is_sdxl"
+        run_cmd.append("--is_sdxl")
     if is_v2:
-        run_cmd += f" --is_v2"
-    run_cmd += f" --device {device}"
-    run_cmd += f" --mode {mode}"
-    run_cmd += f" --safetensors"
+        run_cmd.append("--is_v2")
+
+    # Adding required parameters
+    run_cmd.append("--device")
+    run_cmd.append(device)
+    run_cmd.append("--mode")
+    run_cmd.append(mode)
+    run_cmd.append("--safetensors")
+
+    # Handling conditional parameters based on mode
     if mode == "fixed":
-        run_cmd += f" --linear_dim {linear_dim}"
-        run_cmd += f" --conv_dim {conv_dim}"
-    if mode == "threshold":
-        run_cmd += f" --linear_threshold {linear_threshold}"
-        run_cmd += f" --conv_threshold {conv_threshold}"
-    if mode == "ratio":
-        run_cmd += f" --linear_ratio {linear_ratio}"
-        run_cmd += f" --conv_ratio {conv_ratio}"
-    if mode == "quantile":
-        run_cmd += f" --linear_quantile {linear_quantile}"
-        run_cmd += f" --conv_quantile {conv_quantile}"
+        run_cmd.append("--linear_dim")
+        run_cmd.append(str(linear_dim))
+        run_cmd.append("--conv_dim")
+        run_cmd.append(str(conv_dim))
+    elif mode == "threshold":
+        run_cmd.append("--linear_threshold")
+        run_cmd.append(str(linear_threshold))
+        run_cmd.append("--conv_threshold")
+        run_cmd.append(str(conv_threshold))
+    elif mode == "ratio":
+        run_cmd.append("--linear_ratio")
+        run_cmd.append(str(linear_ratio))
+        run_cmd.append("--conv_ratio")
+        run_cmd.append(str(conv_ratio))
+    elif mode == "quantile":
+        run_cmd.append("--linear_quantile")
+        run_cmd.append(str(linear_quantile))
+        run_cmd.append("--conv_quantile")
+        run_cmd.append(str(conv_quantile))
+
     if use_sparse_bias:
-        run_cmd += f" --use_sparse_bias"
-    run_cmd += f" --sparsity {sparsity}"
+        run_cmd.append("--use_sparse_bias")
+
+    # Adding additional options
+    run_cmd.append("--sparsity")
+    run_cmd.append(str(sparsity))
+
     if disable_cp:
-        run_cmd += f" --disable_cp"
-    run_cmd += rf' "{base_model}"'
-    run_cmd += rf' "{db_model}"'
-    run_cmd += rf' "{output_name}"'
+        run_cmd.append("--disable_cp")
 
-    log.info(run_cmd)
+    # Add paths
+    run_cmd.append(fr"{base_model}")
+    run_cmd.append(fr"{db_model}")
+    run_cmd.append(fr"{output_name}")
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = (
-        rf"{scriptdir}{os.pathsep}{scriptdir}/sd-scripts{os.pathsep}{env.get('PYTHONPATH', '')}"
-    )
+    env = setup_environment()
 
-    # Run the command
+    # Reconstruct the safe command string for display
+    command_to_run = " ".join(run_cmd)
+    log.info(f"Executing command: {command_to_run}")
+            
+    # Run the command in the sd-scripts folder context
     subprocess.run(run_cmd, env=env)
+
 
     log.info("Done extracting...")
 

@@ -11,9 +11,10 @@ from .merge_lycoris_gui import gradio_merge_lycoris_tab
 
 
 class LoRATools:
-    def __init__(self, headless: bool = False):
-        self.headless = headless
-
+    def __init__(
+        self,
+        headless: bool = False,
+    ):
         gr.Markdown("This section provide various LoRA tools...")
         gradio_extract_dylora_tab(headless=headless)
         gradio_convert_lcm_tab(headless=headless)

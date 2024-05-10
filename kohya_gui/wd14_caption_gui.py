@@ -1,7 +1,12 @@
 import gradio as gr
-from easygui import msgbox
 import subprocess
-from .common_gui import get_folder_path, add_pre_postfix, scriptdir, list_dirs
+from .common_gui import (
+    get_folder_path,
+    add_pre_postfix,
+    scriptdir,
+    list_dirs,
+    get_executable_path, setup_environment,
+)
 from .class_gui_config import KohyaSSGUIConfig
 import os
 
@@ -9,6 +14,7 @@ from .custom_logging import setup_logging
 
 # Set up logging
 log = setup_logging()
+old_onnx_value = True
 
 
 def caption_images(
@@ -37,70 +43,95 @@ def caption_images(
 ) -> None:
     # Check for images_dir_input
     if train_data_dir == "":
-        msgbox("Image folder is missing...")
+        log.info("Image folder is missing...")
         return
 
     if caption_extension == "":
-        msgbox("Please provide an extension for the caption files.")
+        log.info("Please provide an extension for the caption files.")
         return
 
+    repo_id_converted = repo_id.replace("/", "_")
+    if not os.path.exists(f"./wd14_tagger_model/{repo_id_converted}"):
+        force_download = True
+
     log.info(f"Captioning files in {train_data_dir}...")
-    run_cmd = rf'accelerate launch "{scriptdir}/sd-scripts/finetune/tag_images_by_wd14_tagger.py"'
-    # if always_first_tags:
-    #     run_cmd += f' --always_first_tags="{always_first_tags}"'
+    run_cmd = [
+        rf'{get_executable_path("accelerate")}',
+        "launch",
+        rf"{scriptdir}/sd-scripts/finetune/tag_images_by_wd14_tagger.py",
+    ]
+
+    # Uncomment and modify if needed
+    # if always_first_tags != "":
+    #     run_cmd.append('--always_first_tags')
+    #     run_cmd.append(always_first_tags)
+
     if append_tags:
-        run_cmd += f" --append_tags"
-    run_cmd += f" --batch_size={int(batch_size)}"
-    run_cmd += f' --caption_extension="{caption_extension}"'
-    run_cmd += f' --caption_separator="{caption_separator}"'
+        run_cmd.append("--append_tags")
+    run_cmd.append("--batch_size")
+    run_cmd.append(str(int(batch_size)))
+    run_cmd.append("--caption_extension")
+    run_cmd.append(caption_extension)
+    run_cmd.append("--caption_separator")
+    run_cmd.append(caption_separator)
+
     if character_tag_expand:
-        run_cmd += f" --character_tag_expand"
+        run_cmd.append("--character_tag_expand")
     if not character_threshold == 0.35:
-        run_cmd += f" --character_threshold={character_threshold}"
+        run_cmd.append("--character_threshold")
+        run_cmd.append(str(character_threshold))
     if debug:
-        run_cmd += f" --debug"
+        run_cmd.append("--debug")
     if force_download:
-        run_cmd += f" --force_download"
+        run_cmd.append("--force_download")
     if frequency_tags:
-        run_cmd += f" --frequency_tags"
+        run_cmd.append("--frequency_tags")
     if not general_threshold == 0.35:
-        run_cmd += f" --general_threshold={general_threshold}"
-    run_cmd += f' --max_data_loader_n_workers="{int(max_data_loader_n_workers)}"'
+        run_cmd.append("--general_threshold")
+        run_cmd.append(str(general_threshold))
+    run_cmd.append("--max_data_loader_n_workers")
+    run_cmd.append(str(int(max_data_loader_n_workers)))
+
     if onnx:
-        run_cmd += f" --onnx"
+        run_cmd.append("--onnx")
     if recursive:
-        run_cmd += f" --recursive"
+        run_cmd.append("--recursive")
     if remove_underscore:
-        run_cmd += f" --remove_underscore"
-    run_cmd += f' --repo_id="{repo_id}"'
+        run_cmd.append("--remove_underscore")
+    run_cmd.append("--repo_id")
+    run_cmd.append(repo_id)
     if not tag_replacement == "":
-        run_cmd += f" --tag_replacement={tag_replacement}"
+        run_cmd.append("--tag_replacement")
+        run_cmd.append(tag_replacement)
     if not thresh == 0.35:
-        run_cmd += f" --thresh={thresh}"
+        run_cmd.append("--thresh")
+        run_cmd.append(str(thresh))
     if not undesired_tags == "":
-        run_cmd += f' --undesired_tags="{undesired_tags}"'
+        run_cmd.append("--undesired_tags")
+        run_cmd.append(undesired_tags)
     if use_rating_tags:
-        run_cmd += f" --use_rating_tags"
+        run_cmd.append("--use_rating_tags")
     if use_rating_tags_as_last_tag:
-        run_cmd += f" --use_rating_tags_as_last_tag"
-    run_cmd += rf' "{train_data_dir}"'
+        run_cmd.append("--use_rating_tags_as_last_tag")
 
-    log.info(run_cmd)
+    # Add the directory containing the training data
+    run_cmd.append(rf"{train_data_dir}")
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = (
-        rf"{scriptdir}{os.pathsep}{scriptdir}/sd-scripts{os.pathsep}{env.get('PYTHONPATH', '')}"
-    )
-    env["TF_ENABLE_ONEDNN_OPTS"] = "0"
+    env = setup_environment()
 
-    # Run the command
+    # Reconstruct the safe command string for display
+    command_to_run = " ".join(run_cmd)
+    log.info(f"Executing command: {command_to_run}")
+
+    # Run the command in the sd-scripts folder context
     subprocess.run(run_cmd, env=env)
-    
+
     # Add prefix and postfix
     add_pre_postfix(
         folder=train_data_dir,
         caption_file_ext=caption_extension,
         prefix=always_first_tags,
+        recursive=recursive,
     )
 
     log.info("...captioning done")
@@ -112,7 +143,9 @@ def caption_images(
 
 
 def gradio_wd14_caption_gui_tab(
-    headless=False, default_train_dir=None, config: KohyaSSGUIConfig = {}
+    headless=False,
+    default_train_dir=None,
+    config: KohyaSSGUIConfig = {},
 ):
     from .common_gui import create_refresh_button
 
@@ -193,6 +226,7 @@ def gradio_wd14_caption_gui_tab(
                 choices=[".cap", ".caption", ".txt"],
                 value=".txt",
                 interactive=True,
+                allow_custom_value=True,
             )
 
             caption_separator = gr.Textbox(
@@ -227,7 +261,7 @@ def gradio_wd14_caption_gui_tab(
         with gr.Row():
             always_first_tags = gr.Textbox(
                 label="Prefix to add to WD14 caption",
-                info="comma-separated list of tags to always put at the beginning, e.g. 1girl, 1boy, ",
+                info="comma-separated list of tags to always put at the beginning, e.g.: 1girl, 1boy, ",
                 placeholder="(Optional)",
                 interactive=True,
                 value=config.get("wd14_caption.always_first_tags", ""),
@@ -323,6 +357,17 @@ def gradio_wd14_caption_gui_tab(
                 label="Max dataloader workers",
                 interactive=True,
             )
+
+        def repo_id_changes(repo_id, onnx):
+            global old_onnx_value
+
+            if "-v3" in repo_id:
+                old_onnx_value = onnx
+                return gr.Checkbox(value=True, interactive=False)
+            else:
+                return gr.Checkbox(value=old_onnx_value, interactive=True)
+
+        repo_id.change(repo_id_changes, inputs=[repo_id, onnx], outputs=[onnx])
 
         caption_button = gr.Button("Caption images")
 

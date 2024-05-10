@@ -1,5 +1,4 @@
 import gradio as gr
-from easygui import msgbox
 import subprocess
 import os
 import sys
@@ -8,7 +7,7 @@ from .common_gui import (
     get_file_path,
     scriptdir,
     list_files,
-    create_refresh_button,
+    create_refresh_button, setup_environment
 )
 
 from .custom_logging import setup_logging
@@ -36,22 +35,24 @@ def resize_lora(
 ):
     # Check for caption_text_input
     if model == "":
-        msgbox("Invalid model file")
+        log.info("Invalid model file")
         return
 
     # Check if source model exist
     if not os.path.isfile(model):
-        msgbox("The provided model is not a file")
+        log.info("The provided model is not a file")
         return
 
     if dynamic_method == "sv_ratio":
         if float(dynamic_param) < 2:
-            msgbox(f"Dynamic parameter for {dynamic_method} need to be 2 or greater...")
+            log.info(
+                f"Dynamic parameter for {dynamic_method} need to be 2 or greater..."
+            )
             return
 
     if dynamic_method == "sv_fro" or dynamic_method == "sv_cumulative":
         if float(dynamic_param) < 0 or float(dynamic_param) > 1:
-            msgbox(
+            log.info(
                 f"Dynamic parameter for {dynamic_method} need to be between 0 and 1..."
             )
             return
@@ -63,26 +64,39 @@ def resize_lora(
     if device == "":
         device = "cuda"
 
-    run_cmd = rf'"{PYTHON}" "{scriptdir}/sd-scripts/networks/resize_lora.py"'
-    run_cmd += f" --save_precision {save_precision}"
-    run_cmd += rf' --save_to "{save_to}"'
-    run_cmd += rf' --model "{model}"'
-    run_cmd += f" --new_rank {new_rank}"
-    run_cmd += f" --device {device}"
-    if not dynamic_method == "None":
-        run_cmd += f" --dynamic_method {dynamic_method}"
-        run_cmd += f" --dynamic_param {dynamic_param}"
+    run_cmd = [
+        rf"{PYTHON}",
+        rf"{scriptdir}/sd-scripts/networks/resize_lora.py",
+        "--save_precision",
+        save_precision,
+        "--save_to",
+        rf"{save_to}",
+        "--model",
+        rf"{model}",
+        "--new_rank",
+        str(new_rank),
+        "--device",
+        device,
+    ]
+
+    # Conditional checks for dynamic parameters
+    if dynamic_method != "None":
+        run_cmd.append("--dynamic_method")
+        run_cmd.append(dynamic_method)
+        run_cmd.append("--dynamic_param")
+        run_cmd.append(str(dynamic_param))
+
+    # Check for verbosity
     if verbose:
-        run_cmd += f" --verbose"
+        run_cmd.append("--verbose")
 
-    log.info(run_cmd)
+    env = setup_environment()
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = (
-        rf"{scriptdir}{os.pathsep}{scriptdir}/sd-scripts{os.pathsep}{env.get('PYTHONPATH', '')}"
-    )
+    # Reconstruct the safe command string for display
+    command_to_run = " ".join(run_cmd)
+    log.info(f"Executing command: {command_to_run}")
 
-    # Run the command
+    # Run the command in the sd-scripts folder context
     subprocess.run(run_cmd, env=env)
 
     log.info("Done resizing...")
@@ -93,7 +107,9 @@ def resize_lora(
 ###
 
 
-def gradio_resize_lora_tab(headless=False):
+def gradio_resize_lora_tab(
+    headless=False,
+):
     current_model_dir = os.path.join(scriptdir, "outputs")
     current_save_dir = os.path.join(scriptdir, "outputs")
 

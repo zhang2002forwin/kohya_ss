@@ -1,5 +1,4 @@
 import gradio as gr
-from easygui import msgbox
 import subprocess
 import os
 import sys
@@ -8,7 +7,7 @@ from .common_gui import (
     get_file_path,
     scriptdir,
     list_files,
-    create_refresh_button,
+    create_refresh_button, setup_environment
 )
 
 from .custom_logging import setup_logging
@@ -41,7 +40,7 @@ def svd_merge_lora(
 ):
     # Check if the output file already exists
     if os.path.isfile(save_to):
-        print(f"Output file '{save_to}' already exists. Aborting.")
+        log.info(f"Output file '{save_to}' already exists. Aborting.")
         return
 
     # Check if the ratio total is equal to one. If not normalise to 1
@@ -52,51 +51,51 @@ def svd_merge_lora(
         ratio_c /= total_ratio
         ratio_d /= total_ratio
 
-    run_cmd = rf'"{PYTHON}" "{scriptdir}/sd-scripts/networks/svd_merge_lora.py"'
-    run_cmd += f" --save_precision {save_precision}"
-    run_cmd += f" --precision {precision}"
-    run_cmd += rf' --save_to "{save_to}"'
+    run_cmd = [
+        rf"{PYTHON}",
+        rf"{scriptdir}/sd-scripts/networks/svd_merge_lora.py",
+        "--save_precision",
+        save_precision,
+        "--precision",
+        precision,
+        "--save_to",
+        save_to,
+    ]
 
-    run_cmd_models = " --models"
-    run_cmd_ratios = " --ratios"
+    # Variables for model paths and their ratios
+    models = []
+    ratios = []
+
     # Add non-empty models and their ratios to the command
-    if lora_a_model:
-        if not os.path.isfile(lora_a_model):
-            msgbox("The provided model A is not a file")
-            return
-        run_cmd_models += rf' "{lora_a_model}"'
-        run_cmd_ratios += f" {ratio_a}"
-    if lora_b_model:
-        if not os.path.isfile(lora_b_model):
-            msgbox("The provided model B is not a file")
-            return
-        run_cmd_models += rf' "{lora_b_model}"'
-        run_cmd_ratios += f" {ratio_b}"
-    if lora_c_model:
-        if not os.path.isfile(lora_c_model):
-            msgbox("The provided model C is not a file")
-            return
-        run_cmd_models += rf' "{lora_c_model}"'
-        run_cmd_ratios += f" {ratio_c}"
-    if lora_d_model:
-        if not os.path.isfile(lora_d_model):
-            msgbox("The provided model D is not a file")
-            return
-        run_cmd_models += rf' "{lora_d_model}"'
-        run_cmd_ratios += f" {ratio_d}"
+    def add_model(model_path, ratio):
+        if not os.path.isfile(model_path):
+            log.info(f"The provided model at {model_path} is not a file")
+            return False
+        models.append(fr"{model_path}")
+        ratios.append(str(ratio))
+        return True
 
-    run_cmd += run_cmd_models
-    run_cmd += run_cmd_ratios
-    run_cmd += f" --device {device}"
-    run_cmd += f' --new_rank "{new_rank}"'
-    run_cmd += f' --new_conv_rank "{new_conv_rank}"'
+    if lora_a_model and add_model(lora_a_model, ratio_a):
+        pass
+    if lora_b_model and add_model(lora_b_model, ratio_b):
+        pass
+    if lora_c_model and add_model(lora_c_model, ratio_c):
+        pass
+    if lora_d_model and add_model(lora_d_model, ratio_d):
+        pass
 
-    log.info(run_cmd)
+    if models and ratios:  # Ensure we have valid models and ratios before appending
+        run_cmd.extend(["--models"] + models)
+        run_cmd.extend(["--ratios"] + ratios)
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = (
-        rf"{scriptdir}{os.pathsep}{scriptdir}/sd-scripts{os.pathsep}{env.get('PYTHONPATH', '')}"
+    run_cmd.extend(
+        ["--device", device, "--new_rank", str(new_rank), "--new_conv_rank", str(new_conv_rank)]
     )
+
+    # Log the command
+    log.info(" ".join(run_cmd))
+
+    env = setup_environment()
 
     # Run the command
     subprocess.run(run_cmd, env=env)

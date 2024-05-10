@@ -6,7 +6,6 @@ import json
 
 # Third-party imports
 import gradio as gr
-from easygui import msgbox
 
 # Local module imports
 from .common_gui import (
@@ -14,7 +13,7 @@ from .common_gui import (
     get_file_path,
     scriptdir,
     list_files,
-    create_refresh_button,
+    create_refresh_button, setup_environment
 )
 from .custom_logging import setup_logging
 
@@ -33,7 +32,7 @@ def check_model(model):
     if not model:
         return True
     if not os.path.isfile(model):
-        msgbox(f"The provided {model} is not a file")
+        log.info(f"The provided {model} is not a file")
         return False
     return True
 
@@ -53,12 +52,12 @@ class GradioMergeLoRaTab:
         self.build_tab()
 
     def save_inputs_to_json(self, file_path, inputs):
-        with open(file_path, "w") as file:
+        with open(file_path, "w", encoding="utf-8") as file:
             json.dump(inputs, file)
         log.info(f"Saved inputs to {file_path}")
 
     def load_inputs_from_json(self, file_path):
-        with open(file_path, "r") as file:
+        with open(file_path, "r", encoding="utf-8") as file:
             inputs = json.load(file)
         log.info(f"Loaded inputs from {file_path}")
         return inputs
@@ -422,36 +421,43 @@ class GradioMergeLoRaTab:
                 return
 
         if not sdxl_model:
-            run_cmd = rf'"{PYTHON}" "{scriptdir}/sd-scripts/networks/merge_lora.py"'
+            run_cmd = [rf"{PYTHON}", rf"{scriptdir}/sd-scripts/networks/merge_lora.py"]
         else:
-            run_cmd = (
-                rf'"{PYTHON}" "{scriptdir}/sd-scripts/networks/sdxl_merge_lora.py"'
-            )
+            run_cmd = [
+                rf"{PYTHON}",
+                rf"{scriptdir}/sd-scripts/networks/sdxl_merge_lora.py",
+            ]
+
         if sd_model:
-            run_cmd += rf' --sd_model "{sd_model}"'
-        run_cmd += f" --save_precision {save_precision}"
-        run_cmd += f" --precision {precision}"
-        run_cmd += rf' --save_to "{save_to}"'
+            run_cmd.append("--sd_model")
+            run_cmd.append(rf"{sd_model}")
 
-        # Create a space-separated string of non-empty models (from the second element onwards), enclosed in double quotes
-        models_cmd = " ".join([rf'"{model}"' for model in lora_models if model])
+        run_cmd.append("--save_precision")
+        run_cmd.append(save_precision)
+        run_cmd.append("--precision")
+        run_cmd.append(precision)
+        run_cmd.append("--save_to")
+        run_cmd.append(rf"{save_to}")
 
-        # Create a space-separated string of non-zero ratios corresponding to non-empty LoRa models
+        # Prepare model and ratios command as lists, including only non-empty models
+        valid_models = [model for model in lora_models if model]
         valid_ratios = [ratios[i] for i, model in enumerate(lora_models) if model]
-        ratios_cmd = " ".join([str(ratio) for ratio in valid_ratios])
 
-        if models_cmd:
-            run_cmd += f" --models {models_cmd}"
-            run_cmd += f" --ratios {ratios_cmd}"
+        if valid_models:
+            run_cmd.append("--models")
+            run_cmd.extend(valid_models)  # Each model is a separate argument
+            run_cmd.append("--ratios")
+            run_cmd.extend(
+                map(str, valid_ratios)
+            )  # Convert ratios to strings and include them as separate arguments
 
-        log.info(run_cmd)
+        env = setup_environment()
 
-        env = os.environ.copy()
-        env["PYTHONPATH"] = (
-            rf"{scriptdir}{os.pathsep}{scriptdir}/sd-scripts{os.pathsep}{env.get('PYTHONPATH', '')}"
-        )
+        # Reconstruct the safe command string for display
+        command_to_run = " ".join(run_cmd)
+        log.info(f"Executing command: {command_to_run}")
 
-        # Run the command
+        # Run the command in the sd-scripts folder context
         subprocess.run(run_cmd, env=env)
 
         log.info("Done merging...")

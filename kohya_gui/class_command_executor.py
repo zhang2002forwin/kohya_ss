@@ -1,5 +1,8 @@
 import subprocess
 import psutil
+import time
+import gradio as gr
+
 from .custom_logging import setup_logging
 
 # Set up logging
@@ -11,11 +14,19 @@ class CommandExecutor:
     A class to execute and manage commands.
     """
 
-    def __init__(self):
+    def __init__(self, headless: bool = False):
         """
         Initialize the CommandExecutor.
         """
+        self.headless = headless
         self.process = None
+        
+        with gr.Row():
+            self.button_run = gr.Button("Start training", variant="primary")
+
+            self.button_stop_training = gr.Button(
+                "Stop training", visible=self.process is not None or headless, variant="stop"
+            )
 
     def execute_command(self, run_cmd: str, **kwargs):
         """
@@ -28,13 +39,22 @@ class CommandExecutor:
         if self.process and self.process.poll() is None:
             log.info("The command is already running. Please wait for it to finish.")
         else:
+            # for i, item in enumerate(run_cmd):
+            #     log.info(f"{i}: {item}")
+
+            # Reconstruct the safe command string for display
+            command_to_run = " ".join(run_cmd)
+            log.info(f"Executing command: {command_to_run}")
+
+            # Execute the command securely
             self.process = subprocess.Popen(run_cmd, **kwargs)
+            log.info("Command executed.")
 
     def kill_command(self):
         """
         Kill the currently running command and its child processes.
         """
-        if self.process and self.process.poll() is None:
+        if self.is_running():
             try:
                 # Get the parent process and kill all its children
                 parent = psutil.Process(self.process.pid)
@@ -51,4 +71,23 @@ class CommandExecutor:
                 # General exception handling for any other errors
                 log.info(f"Error when terminating process: {e}")
         else:
+            self.process = None
             log.info("There is no running process to kill.")
+
+        return gr.Button(visible=True), gr.Button(visible=False or self.headless)
+
+    def wait_for_training_to_end(self):
+        while self.is_running():
+            time.sleep(1)
+            log.debug("Waiting for training to end...")
+        log.info("Training has ended.")
+        return gr.Button(visible=True), gr.Button(visible=False or self.headless)
+
+    def is_running(self):
+        """
+        Check if the command is currently running.
+
+        Returns:
+        - bool: True if the command is running, False otherwise.
+        """
+        return self.process is not None and self.process.poll() is None

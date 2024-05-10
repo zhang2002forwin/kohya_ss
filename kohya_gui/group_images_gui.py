@@ -1,7 +1,6 @@
 import gradio as gr
-from easygui import msgbox
 import subprocess
-from .common_gui import get_folder_path, scriptdir, list_dirs
+from .common_gui import get_folder_path, scriptdir, list_dirs, setup_environment
 import os
 import sys
 
@@ -23,37 +22,44 @@ def group_images(
     caption_ext,
 ):
     if input_folder == "":
-        msgbox("Input folder is missing...")
+        log.info("Input folder is missing...")
         return
 
     if output_folder == "":
-        msgbox("Please provide an output folder.")
+        log.info("Please provide an output folder.")
         return
 
     log.info(f"Grouping images in {input_folder}...")
 
-    run_cmd = rf'"{PYTHON}" "{scriptdir}/tools/group_images.py"'
-    run_cmd += f' "{input_folder}"'
-    run_cmd += f' "{output_folder}"'
-    run_cmd += f" {(group_size)}"
+    run_cmd = [
+        fr"{PYTHON}",
+        f"{scriptdir}/tools/group_images.py",
+        fr"{input_folder}",
+        fr"{output_folder}",
+        str(group_size),
+    ]
+
     if include_subfolders:
-        run_cmd += f" --include_subfolders"
+        run_cmd.append("--include_subfolders")
+
     if do_not_copy_other_files:
-        run_cmd += f" --do_not_copy_other_files"
+        run_cmd.append("--do_not_copy_other_files")
+
     if generate_captions:
-        run_cmd += f" --caption"
+        run_cmd.append("--caption")
         if caption_ext:
-            run_cmd += f" --caption_ext={caption_ext}"
+            run_cmd.append("--caption_ext")
+            run_cmd.append(caption_ext)
 
-    log.info(run_cmd)
+    env = setup_environment()
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = (
-        rf"{scriptdir}{os.pathsep}{scriptdir}/sd-scripts{os.pathsep}{env.get('PYTHONPATH', '')}"
-    )
-
-    # Run the command
+    # Reconstruct the safe command string for display
+    command_to_run = " ".join(run_cmd)
+    log.info(f"Executing command: {command_to_run}")
+            
+    # Run the command in the sd-scripts folder context
     subprocess.run(run_cmd, env=env)
+
 
     log.info("...grouping done")
 
@@ -176,6 +182,7 @@ def gradio_group_images_gui_tab(headless=False):
                 choices=[".cap", ".caption", ".txt"],
                 value=".txt",
                 interactive=True,
+                allow_custom_value=True,
             )
 
         group_images_button = gr.Button("Group images")

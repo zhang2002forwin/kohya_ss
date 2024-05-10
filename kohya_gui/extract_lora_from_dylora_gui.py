@@ -1,5 +1,4 @@
 import gradio as gr
-from easygui import msgbox
 import subprocess
 import os
 import sys
@@ -7,7 +6,7 @@ from .common_gui import (
     get_file_path,
     scriptdir,
     list_files,
-    create_refresh_button,
+    create_refresh_button, setup_environment
 )
 
 from .custom_logging import setup_logging
@@ -30,12 +29,12 @@ def extract_dylora(
 ):
     # Check for caption_text_input
     if model == "":
-        msgbox("Invalid DyLoRA model file")
+        log.info("Invalid DyLoRA model file")
         return
 
     # Check if source model exist
     if not os.path.isfile(model):
-        msgbox("The provided DyLoRA model is not a file")
+        log.info("The provided DyLoRA model is not a file")
         return
 
     if os.path.dirname(save_to) == "":
@@ -49,22 +48,25 @@ def extract_dylora(
         path, ext = os.path.splitext(save_to)
         save_to = f"{path}_tmp{ext}"
 
-    run_cmd = (
-        rf'"{PYTHON}" "{scriptdir}/sd-scripts/networks/extract_lora_from_dylora.py"'
-    )
-    run_cmd += rf' --save_to "{save_to}"'
-    run_cmd += rf' --model "{model}"'
-    run_cmd += f" --unit {unit}"
+    run_cmd = [
+        rf"{PYTHON}",
+        rf"{scriptdir}/sd-scripts/networks/extract_lora_from_dylora.py",
+        "--save_to",
+        rf"{save_to}",
+        "--model",
+        rf"{model}",
+        "--unit",
+        str(unit),
+    ]
 
-    log.info(run_cmd)
+    env = setup_environment()
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = (
-        rf"{scriptdir}{os.pathsep}{scriptdir}/sd-scripts{os.pathsep}{env.get('PYTHONPATH', '')}"
-    )
+    # Reconstruct the safe command string for display
+    command_to_run = " ".join(run_cmd)
+    log.info(f"Executing command: {command_to_run}")
 
-    # Run the command
-    subprocess.run(run_cmd, env=env)
+    # Run the command in the sd-scripts folder context
+    subprocess.run(run_cmd, env=env, shell=False)
 
     log.info("Done extracting DyLoRA...")
 

@@ -45,7 +45,7 @@ class KohyaSSGUIConfig:
         - config (dict): The configuration data to save.
         """
         # Write the configuration data to the TOML file
-        with open(f"{config_file_path}", "w") as f:
+        with open(f"{config_file_path}", "w", encoding="utf-8") as f:
             toml.dump(config, f)
 
     def get(self, key: str, default=None):
@@ -80,3 +80,14 @@ class KohyaSSGUIConfig:
         # Return the final value
         log.debug(f"Returned {data}")
         return data
+
+    def is_config_loaded(self) -> bool:
+        """
+        Checks if the configuration was loaded from a file.
+
+        Returns:
+        bool: True if the configuration was loaded from a file, False otherwise.
+        """
+        is_loaded = self.config != {}
+        log.debug(f"Configuration was loaded from file: {is_loaded}")
+        return is_loaded

@@ -8,6 +8,7 @@ from .git_caption_gui import gradio_git_caption_gui_tab
 from .wd14_caption_gui import gradio_wd14_caption_gui_tab
 from .manual_caption_gui import gradio_manual_caption_gui_tab
 from .group_images_gui import gradio_group_images_gui_tab
+from .class_gui_config import KohyaSSGUIConfig
 
 
 def utilities_tab(
@@ -15,10 +16,8 @@ def utilities_tab(
     reg_data_dir_input=gr.Dropdown(),
     output_dir_input=gr.Dropdown(),
     logging_dir_input=gr.Dropdown(),
-    enable_copy_info_button=bool(False),
-    enable_dreambooth_tab=True,
     headless=False,
-    config: dict = {},
+    config: KohyaSSGUIConfig = {},
 ):
     with gr.Tab("Captioning"):
         gradio_basic_caption_gui_tab(headless=headless)

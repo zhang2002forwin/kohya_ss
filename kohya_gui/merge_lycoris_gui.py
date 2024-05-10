@@ -1,5 +1,4 @@
 import gradio as gr
-from easygui import msgbox
 import subprocess
 import os
 import sys
@@ -8,7 +7,7 @@ from .common_gui import (
     get_file_path,
     scriptdir,
     list_files,
-    create_refresh_button,
+    create_refresh_button, setup_environment
 )
 
 from .custom_logging import setup_logging
@@ -36,27 +35,39 @@ def merge_lycoris(
 ):
     log.info("Merge model...")
 
-    run_cmd = rf'"{PYTHON}" "{scriptdir}/tools/merge_lycoris.py"'
-    run_cmd += rf' "{base_model}"'
-    run_cmd += rf' "{lycoris_model}"'
-    run_cmd += rf' "{output_name}"'
-    run_cmd += f" --weight {weight}"
-    run_cmd += f" --device {device}"
-    run_cmd += f" --dtype {dtype}"
+    # Build the command to run merge_lycoris.py using list format
+    run_cmd = [
+        fr"{PYTHON}",
+        fr"{scriptdir}/tools/merge_lycoris.py",
+        fr"{base_model}",
+        fr"{lycoris_model}",
+        fr"{output_name}",
+    ]
+
+    # Add additional required arguments with their values
+    run_cmd.append("--weight")
+    run_cmd.append(str(weight))
+    run_cmd.append("--device")
+    run_cmd.append(device)
+    run_cmd.append("--dtype")
+    run_cmd.append(dtype)
+
+    # Add optional flags based on conditions
     if is_sdxl:
-        run_cmd += f" --is_sdxl"
+        run_cmd.append("--is_sdxl")
     if is_v2:
-        run_cmd += f" --is_v2"
+        run_cmd.append("--is_v2")
 
-    log.info(run_cmd)
+    # Copy and update the environment variables
+    env = setup_environment()
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = (
-        rf"{scriptdir}{os.pathsep}{scriptdir}/sd-scripts{os.pathsep}{env.get('PYTHONPATH', '')}"
-    )
-
-    # Run the command
+    # Reconstruct the safe command string for display
+    command_to_run = " ".join(run_cmd)
+    log.info(f"Executing command: {command_to_run}")
+            
+    # Run the command in the sd-scripts folder context
     subprocess.run(run_cmd, env=env)
+
 
     log.info("Done merging...")
 

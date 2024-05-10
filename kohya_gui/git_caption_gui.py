@@ -1,9 +1,8 @@
 import gradio as gr
-from easygui import msgbox
 import subprocess
 import os
 import sys
-from .common_gui import get_folder_path, add_pre_postfix, scriptdir, list_dirs
+from .common_gui import get_folder_path, add_pre_postfix, scriptdir, list_dirs, setup_environment
 
 from .custom_logging import setup_logging
 
@@ -25,33 +24,49 @@ def caption_images(
 ):
     # Check for images_dir_input
     if train_data_dir == "":
-        msgbox("Image folder is missing...")
+        log.info("Image folder is missing...")
         return
 
     if caption_ext == "":
-        msgbox("Please provide an extension for the caption files.")
+        log.info("Please provide an extension for the caption files.")
         return
 
     log.info(f"GIT captioning files in {train_data_dir}...")
-    run_cmd = rf'"{PYTHON}" "{scriptdir}/sd-scripts/finetune/make_captions_by_git.py"'
-    if not model_id == "":
-        run_cmd += f' --model_id="{model_id}"'
-    run_cmd += f' --batch_size="{int(batch_size)}"'
-    run_cmd += f' --max_data_loader_n_workers="{int(max_data_loader_n_workers)}"'
-    run_cmd += f' --max_length="{int(max_length)}"'
+
+    run_cmd = [fr"{PYTHON}", fr"{scriptdir}/sd-scripts/finetune/make_captions_by_git.py"]
+
+    # Add --model_id if provided
+    if model_id != "":
+        run_cmd.append("--model_id")
+        run_cmd.append(fr'{model_id}')
+
+    # Add other arguments with their values
+    run_cmd.append("--batch_size")
+    run_cmd.append(str(batch_size))
+
+    run_cmd.append("--max_data_loader_n_workers")
+    run_cmd.append(str(max_data_loader_n_workers))
+
+    run_cmd.append("--max_length")
+    run_cmd.append(str(max_length))
+
+    # Add --caption_extension if provided
     if caption_ext != "":
-        run_cmd += f' --caption_extension="{caption_ext}"'
-    run_cmd += f' "{train_data_dir}"'
+        run_cmd.append("--caption_extension")
+        run_cmd.append(caption_ext)
 
-    log.info(run_cmd)
+    # Add the directory containing the training data
+    run_cmd.append(fr"{train_data_dir}")
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = (
-        rf"{scriptdir}{os.pathsep}{scriptdir}/sd-scripts{os.pathsep}{env.get('PYTHONPATH', '')}"
-    )
+    env = setup_environment()
 
-    # Run the command
+    # Reconstruct the safe command string for display
+    command_to_run = " ".join(run_cmd)
+    log.info(f"Executing command: {command_to_run}")
+            
+    # Run the command in the sd-scripts folder context
     subprocess.run(run_cmd, env=env)
+
 
     # Add prefix and postfix
     add_pre_postfix(
@@ -69,7 +84,9 @@ def caption_images(
 ###
 
 
-def gradio_git_caption_gui_tab(headless=False, default_train_dir=None):
+def gradio_git_caption_gui_tab(
+    headless=False, default_train_dir=None,
+):
     from .common_gui import create_refresh_button
 
     default_train_dir = (
@@ -119,6 +136,7 @@ def gradio_git_caption_gui_tab(headless=False, default_train_dir=None):
                 choices=[".cap", ".caption", ".txt"],
                 value=".txt",
                 interactive=True,
+                allow_custom_value=True,
             )
 
             prefix = gr.Textbox(
